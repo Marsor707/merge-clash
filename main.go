@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -90,7 +90,7 @@ func parseProxyFile(file string) ([]map[string]any, error) {
 	defer func(f *os.File) {
 		_ = f.Close()
 	}(f)
-	data, err := ioutil.ReadAll(f)
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}
