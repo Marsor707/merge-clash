@@ -14,6 +14,8 @@ builds:
       - darwin
     goarch:
       - amd64
+    ldflags:
+      - -s -w
 archives:
   - format: binary
 checksum:
