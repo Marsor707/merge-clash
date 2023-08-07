@@ -11,3 +11,9 @@
 ```
 
 客户端可通过`http://localhost:8080`订阅
+
+### 使用subConverter后端解析订阅地址
+
+```shell
+./merge -u xxx -u xxx -s http://127.0.0.1:25500 -p 8080
+```
