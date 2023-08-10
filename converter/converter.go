@@ -20,10 +20,11 @@ type Outbound struct {
 	Server   string `yaml:"server"`
 	Port     int    `yaml:"port"`
 	Uuid     string `yaml:"uuid"`
-	AlterId  int    `yaml:"alterId"`
+	AlterId  *int   `yaml:"alterId"`
 	Cipher   string `yaml:"cipher"`
 	Network  string `yaml:"network"`
 	Password string `yaml:"password"`
+	Sni      string `yaml:"sni"`
 	Udp      bool   `yaml:"udp"`
 }
 
@@ -34,7 +35,7 @@ func (o Outbound) ToMap() map[string]any {
 	objType := objValue.Type()
 	for i := 0; i < objValue.NumField(); i++ {
 		field := objValue.Field(i)
-		if field.Kind() == reflect.String && field.IsZero() {
+		if field.IsZero() {
 			continue
 		}
 		fieldName := objType.Field(i).Tag.Get("yaml")
@@ -58,13 +59,14 @@ type Vmess struct {
 }
 
 func (v Vmess) ToOutbound() *Outbound {
+	var aid = parseInt(v.Aid)
 	return &Outbound{
 		Name:    v.Ps,
 		Type:    "vmess",
 		Server:  v.Add,
 		Port:    parseInt(v.Port),
 		Uuid:    v.Id,
-		AlterId: parseInt(v.Aid),
+		AlterId: &aid,
 		Cipher:  "auto",
 		Network: v.Net,
 	}
@@ -91,23 +93,39 @@ func ParseSubscribe(link string) ([]map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
+		var outbound *Outbound
 		if proto.Scheme == "vmess" {
-			outbound, err := parseVmess(proto.Host)
+			outbound, err = parseVmess(proto.Host)
 			if err != nil {
 				return nil, err
 			}
-			res = append(res, outbound.ToMap())
 		} else if proto.Scheme == "ss" {
-			outbound, err := parseSS(proto)
+			outbound, err = parseSS(proto)
 			if err != nil {
 				return nil, err
 			}
-			res = append(res, outbound.ToMap())
 		} else if proto.Scheme == "trojan" {
-			// todo
+			outbound, err = parseTrojan(proto)
+			if err != nil {
+				return nil, err
+			}
 		}
+		res = append(res, outbound.ToMap())
 	}
 	return res, nil
+}
+
+func parseTrojan(proto *url.URL) (*Outbound, error) {
+	host := strings.Split(proto.Host, ":")
+	outbound := &Outbound{
+		Name:     proto.Fragment,
+		Type:     "trojan",
+		Server:   host[0],
+		Port:     parseInt(host[1]),
+		Password: proto.User.Username(),
+		Sni:      proto.Query().Get("sni"),
+	}
+	return outbound, nil
 }
 
 func parseSS(proto *url.URL) (*Outbound, error) {
