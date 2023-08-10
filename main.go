@@ -1,11 +1,13 @@
 package main
 
 import (
+	"clash/converter"
 	_ "embed"
 	"flag"
 	"fmt"
 	"gopkg.in/yaml.v2"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -71,10 +73,6 @@ func init() {
 }
 
 func main() {
-	if len(urls) > 0 && subConverter == "" {
-		fmt.Println("订阅地址解析目前需配合subConvert后端进行")
-		return
-	}
 	for _, file := range files {
 		if err := AddWithFile(file); err != nil {
 			fmt.Println(err)
@@ -82,9 +80,16 @@ func main() {
 		}
 	}
 	if len(urls) > 0 {
-		if err := AddWithSubConverter(urls); err != nil {
-			fmt.Println(err)
-			return
+		if subConverter != "" {
+			if err := AddWithSubConverter(urls); err != nil {
+				fmt.Println(err)
+				return
+			}
+		} else {
+			if err := AddWithInnerConverter(urls); err != nil {
+				fmt.Println(err)
+				return
+			}
 		}
 	}
 	if port != 0 {
@@ -134,6 +139,17 @@ func AddWithSubConverter(urls []string) error {
 	return addToClash(data)
 }
 
+func AddWithInnerConverter(urls []string) error {
+	for i := 0; i < len(urls); i++ {
+		proxies, err := converter.ParseSubscribe(urls[i])
+		if err != nil {
+			return err
+		}
+		addProxiesToClash(proxies)
+	}
+	return nil
+}
+
 func addToClash(data []byte) error {
 	type pro struct {
 		Proxies []map[string]any `yaml:"proxies"`
@@ -143,13 +159,17 @@ func addToClash(data []byte) error {
 	if err != nil {
 		return err
 	}
-	for i := 0; i < len(p.Proxies); i++ {
-		name := formatName(p.Proxies[i]["name"].(string))
-		p.Proxies[i]["name"] = name
-		clash.Proxies = append(clash.Proxies, p.Proxies[i])
+	addProxiesToClash(p.Proxies)
+	return nil
+}
+
+func addProxiesToClash(proxies []map[string]any) {
+	for i := 0; i < len(proxies); i++ {
+		name := formatName(proxies[i]["name"].(string))
+		proxies[i]["name"] = name
+		clash.Proxies = append(clash.Proxies, proxies[i])
 		clash.ProxyGroups[0].Proxies = append(clash.ProxyGroups[0].Proxies, name)
 	}
-	return nil
 }
 
 func formatName(source string) string {
@@ -183,5 +203,15 @@ func ServeHttp(port int) {
 		w.WriteHeader(200)
 		_, _ = w.Write(data)
 	})
+	fmt.Printf("访问 http://%s:%d 进行订阅\n", getLocalIp(), port)
 	_ = http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+}
+
+func getLocalIp() string {
+	conn, err := net.Dial("udp", "8.8.8.8:53")
+	if err != nil {
+		return "localhost"
+	}
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return strings.Split(localAddr.String(), ":")[0]
 }

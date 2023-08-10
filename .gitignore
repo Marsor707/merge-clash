@@ -1,3 +1,4 @@
 clash
 .idea/
 dist/
+*_test.go
