@@ -22,9 +22,11 @@ type Outbound struct {
 	AlterId int    `yaml:"alterId"`
 	Cipher  string `yaml:"cipher"`
 	Network string `yaml:"network"`
+	Udp     bool   `yaml:"udp"`
 }
 
 func (o Outbound) ToMap() map[string]any {
+	o.Udp = true
 	result := make(map[string]any)
 	objValue := reflect.ValueOf(o)
 	objType := objValue.Type()
@@ -50,8 +52,8 @@ type Vmess struct {
 	Tls  string `json:"tls"`
 }
 
-func (v Vmess) ToOutbound() Outbound {
-	return Outbound{
+func (v Vmess) ToOutbound() *Outbound {
+	return &Outbound{
 		Name:    v.Ps,
 		Type:    "vmess",
 		Server:  v.Add,
@@ -85,15 +87,11 @@ func ParseSubscribe(link string) ([]map[string]any, error) {
 			return nil, err
 		}
 		if proto.Scheme == "vmess" {
-			vm, err := base64.StdEncoding.DecodeString(proto.Host)
+			outbound, err := parseVmess(proto.Host)
 			if err != nil {
 				return nil, err
 			}
-			var vms Vmess
-			if err = json.Unmarshal(vm, &vms); err != nil {
-				return nil, err
-			}
-			res = append(res, vms.ToOutbound().ToMap())
+			res = append(res, outbound.ToMap())
 		} else if proto.Scheme == "ss" {
 			// todo
 		} else if proto.Scheme == "trojan" {
@@ -101,6 +99,18 @@ func ParseSubscribe(link string) ([]map[string]any, error) {
 		}
 	}
 	return res, nil
+}
+
+func parseVmess(data string) (*Outbound, error) {
+	vm, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return nil, err
+	}
+	var vms Vmess
+	if err = json.Unmarshal(vm, &vms); err != nil {
+		return nil, err
+	}
+	return vms.ToOutbound(), nil
 }
 
 func doRequest(link string) ([]byte, error) {
