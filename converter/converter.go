@@ -11,18 +11,20 @@ import (
 	"net/url"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 type Outbound struct {
-	Name    string `yaml:"name"`
-	Type    string `yaml:"type"`
-	Server  string `yaml:"server"`
-	Port    int    `yaml:"port"`
-	Uuid    string `yaml:"uuid"`
-	AlterId int    `yaml:"alterId"`
-	Cipher  string `yaml:"cipher"`
-	Network string `yaml:"network"`
-	Udp     bool   `yaml:"udp"`
+	Name     string `yaml:"name"`
+	Type     string `yaml:"type"`
+	Server   string `yaml:"server"`
+	Port     int    `yaml:"port"`
+	Uuid     string `yaml:"uuid"`
+	AlterId  int    `yaml:"alterId"`
+	Cipher   string `yaml:"cipher"`
+	Network  string `yaml:"network"`
+	Password string `yaml:"password"`
+	Udp      bool   `yaml:"udp"`
 }
 
 func (o Outbound) ToMap() map[string]any {
@@ -32,6 +34,9 @@ func (o Outbound) ToMap() map[string]any {
 	objType := objValue.Type()
 	for i := 0; i < objValue.NumField(); i++ {
 		field := objValue.Field(i)
+		if field.Kind() == reflect.String && field.IsZero() {
+			continue
+		}
 		fieldName := objType.Field(i).Tag.Get("yaml")
 		result[fieldName] = field.Interface()
 	}
@@ -93,12 +98,34 @@ func ParseSubscribe(link string) ([]map[string]any, error) {
 			}
 			res = append(res, outbound.ToMap())
 		} else if proto.Scheme == "ss" {
-			// todo
+			outbound, err := parseSS(proto)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, outbound.ToMap())
 		} else if proto.Scheme == "trojan" {
 			// todo
 		}
 	}
 	return res, nil
+}
+
+func parseSS(proto *url.URL) (*Outbound, error) {
+	secret, err := base64.StdEncoding.DecodeString(proto.User.Username())
+	if err != nil {
+		return nil, err
+	}
+	secretInfo := strings.Split(string(secret), ":")
+	host := strings.Split(proto.Host, ":")
+	outbound := &Outbound{
+		Name:     proto.Fragment,
+		Type:     "ss",
+		Server:   host[0],
+		Port:     parseInt(host[1]),
+		Cipher:   secretInfo[0],
+		Password: secretInfo[1],
+	}
+	return outbound, nil
 }
 
 func parseVmess(data string) (*Outbound, error) {
